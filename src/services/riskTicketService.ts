@@ -92,12 +92,24 @@ export const riskTicketService = {
     });
   },
 
-  async handleTicket(id: string, handlerId: string, handlerName: string): Promise<RiskTicket | null> {
-    return this.update(id, {
-      status: 'processing',
-      handlerId,
-      handlerName,
-    });
+  async handleTicket(
+    id: string, 
+    params: { 
+      status?: RiskStatus; 
+      result?: string;
+      handlerId?: string;
+      handlerName?: string;
+    }
+  ): Promise<RiskTicket | null> {
+    const updateData: Partial<RiskTicket> = {};
+    if (params.status) updateData.status = params.status;
+    if (params.result) updateData.result = params.result;
+    if (params.handlerId) updateData.handlerId = params.handlerId;
+    if (params.handlerName) updateData.handlerName = params.handlerName;
+    if (params.status === 'closed' || params.status === 'resolved') {
+      updateData.closeAt = new Date().toISOString();
+    }
+    return this.update(id, updateData);
   },
 
   async resolveTicket(id: string, result: string): Promise<RiskTicket | null> {

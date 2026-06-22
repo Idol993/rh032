@@ -11,7 +11,8 @@ import {
   RiskLevel,
   RiskType,
   RiskStatus,
-  UserRole
+  UserRole,
+  CloseCaseResult
 } from '@/types';
 
 export type ArchiveStatus = 'pending' | 'archived' | 'borrowed';
@@ -119,6 +120,14 @@ export const RISK_STATUS_MAP: Record<RiskStatus, { label: string; color: string 
   processing: { label: '处理中', color: 'badge-primary' },
   resolved: { label: '已解决', color: 'badge-success' },
   closed: { label: '已关闭', color: 'badge-neutral' },
+};
+
+export const CLOSE_CASE_RESULT_MAP: Record<CloseCaseResult, string> = {
+  win: '胜诉',
+  mediation: '调解',
+  lose: '败诉',
+  withdraw: '撤诉',
+  other: '其他',
 };
 
 export const ROLE_MAP: Record<UserRole, { label: string; color: string }> = {

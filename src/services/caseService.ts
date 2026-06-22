@@ -1,4 +1,4 @@
-import { Case, CaseStatus, CaseType, PaginationParams, PaginationResult, CaseLog } from '@/types';
+import { Case, CaseStatus, CaseType, PaginationParams, PaginationResult, CaseLog, CloseCaseResult } from '@/types';
 import { STORAGE_KEYS } from '@/constants';
 import { getFromStorage, saveToStorage } from './mock';
 import { generateId, generateCaseNo, formatDate } from '@/utils';
@@ -154,25 +154,88 @@ export const caseService = {
     });
   },
 
-  async closeCase(caseId: string): Promise<Case | null> {
+  async closeCase(
+    caseId: string, 
+    params?: {
+      reason: string;
+      result: CloseCaseResult;
+      judgmentAmount?: number;
+      applicantId: string;
+      applicantName: string;
+    }
+  ): Promise<Case | null> {
     return new Promise((resolve) => {
       setTimeout(() => {
         const cases = getFromStorage<Case[]>(STORAGE_KEYS.CASES, []);
         const index = cases.findIndex(c => c.id === caseId);
         if (index !== -1) {
+          const now = new Date().toISOString();
           cases[index] = {
             ...cases[index],
             status: 'closed',
             phase: 'closed',
-            closeAt: new Date().toISOString(),
+            closeAt: now,
+            closeReason: params?.reason,
+            closeResult: params?.result,
+            closeJudgmentAmount: params?.judgmentAmount,
+            closeApplicantId: params?.applicantId,
+            closeApplicantName: params?.applicantName,
+            closeAppliedAt: now,
+            closeApprovalStatus: 'approved',
+            closeApproverId: params?.applicantId,
+            closeApproverName: params?.applicantName,
+            closeApprovedAt: now,
           };
           saveToStorage(STORAGE_KEYS.CASES, cases);
-          this.addCaseLog(caseId, '结案', 'system', '系统', '案件已结案');
+          const detailParts = [];
+          if (params?.reason) detailParts.push(`理由：${params.reason}`);
+          if (params?.result) detailParts.push(`结果：${params.result}`);
+          if (params?.judgmentAmount) detailParts.push(`判决金额：${params.judgmentAmount}`);
+          this.addCaseLog(
+            caseId, 
+            '结案申请', 
+            params?.applicantId || 'system', 
+            params?.applicantName || '系统', 
+            detailParts.length > 0 ? detailParts.join('，') : '提交结案申请'
+          );
           resolve(cases[index]);
         } else {
           resolve(null);
         }
       }, 300);
+    });
+  },
+
+  async addProgress(
+    caseId: string,
+    params: {
+      description: string;
+      documentIds?: string[];
+      paymentIds?: string[];
+      remark?: string;
+      operatorId: string;
+      operatorName: string;
+    }
+  ): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const detailParts = [params.description];
+        if (params.remark) detailParts.push(`备注：${params.remark}`);
+        if (params.documentIds && params.documentIds.length > 0) {
+          detailParts.push(`关联文书：${params.documentIds.length}份`);
+        }
+        if (params.paymentIds && params.paymentIds.length > 0) {
+          detailParts.push(`关联费用：${params.paymentIds.length}条`);
+        }
+        this.addCaseLog(
+          caseId,
+          '进度更新',
+          params.operatorId,
+          params.operatorName,
+          detailParts.join('，')
+        );
+        resolve();
+      }, 100);
     });
   },
 

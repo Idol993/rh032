@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Search, 
   Plus, 
@@ -20,24 +21,17 @@ import {
   ListChecks,
   AlertCircle,
 } from 'lucide-react';
-import { Archive as ArchiveType, Case, CaseType } from '@/types';
+import { Archive as ArchiveType, Case, CaseType, Document, Payment } from '@/types';
 import { archiveService } from '@/services/archiveService';
 import { caseService } from '@/services/caseService';
-import { ARCHIVE_STATUS_MAP, CASE_TYPE_MAP } from '@/constants';
-import { formatDate, cn } from '@/utils';
+import { documentService } from '@/services/documentService';
+import { paymentService } from '@/services/paymentService';
+import { ARCHIVE_STATUS_MAP, CASE_TYPE_MAP, PAYMENT_STATUS_MAP, PAYMENT_TYPE_MAP, PAYMENT_STAGE_MAP } from '@/constants';
+import { formatDate, cn, formatCurrency, formatDateTime } from '@/utils';
 import type { ArchiveStatus } from '@/constants';
 
-const ARCHIVE_CHECKLIST = [
-  { name: '委托合同', type: '合同文件' },
-  { name: '收费凭证', type: '财务文件' },
-  { name: '起诉状/答辩状', type: '诉讼文书' },
-  { name: '证据目录', type: '证据材料' },
-  { name: '庭审笔录', type: '庭审记录' },
-  { name: '判决书/裁定书', type: '裁判文书' },
-  { name: '送达回证', type: '程序文件' },
-];
-
 const Archive: React.FC = () => {
+  const navigate = useNavigate();
   const [archives, setArchives] = useState<ArchiveType[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -66,10 +60,17 @@ const Archive: React.FC = () => {
 
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [detailArchive, setDetailArchive] = useState<ArchiveType | null>(null);
+  const [detailCase, setDetailCase] = useState<Case | null>(null);
+  const [detailDocuments, setDetailDocuments] = useState<Document[]>([]);
+  const [detailPayments, setDetailPayments] = useState<Payment[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const [showBorrowConfirm, setShowBorrowConfirm] = useState(false);
   const [borrowId, setBorrowId] = useState('');
   const [borrowing, setBorrowing] = useState(false);
+
+  const [showPaymentDetailModal, setShowPaymentDetailModal] = useState(false);
+  const [detailPayment, setDetailPayment] = useState<Payment | null>(null);
 
   const fetchArchives = async () => {
     setLoading(true);
@@ -123,11 +124,30 @@ const Archive: React.FC = () => {
     setPage(1);
   };
 
-  const handleView = (id: string) => {
+  const handleView = async (id: string) => {
     const archive = archives.find(a => a.id === id);
     if (archive) {
       setDetailArchive(archive);
       setShowDetailModal(true);
+      setDetailLoading(true);
+      setDetailCase(null);
+      setDetailDocuments([]);
+      setDetailPayments([]);
+
+      try {
+        const [caseResult, docsResult, paymentsResult] = await Promise.all([
+          caseService.getById(archive.caseId),
+          documentService.getDocuments({ caseId: archive.caseId, page: 1, pageSize: 100 }),
+          paymentService.getPayments({ caseId: archive.caseId, page: 1, pageSize: 100 }),
+        ]);
+        setDetailCase(caseResult);
+        setDetailDocuments(docsResult.list);
+        setDetailPayments(paymentsResult.list);
+      } catch (error) {
+        console.error('获取卷宗关联数据失败:', error);
+      } finally {
+        setDetailLoading(false);
+      }
     }
   };
 
@@ -209,6 +229,69 @@ const Archive: React.FC = () => {
     }
   };
 
+  const handleViewPayment = (payment: Payment) => {
+    setDetailPayment(payment);
+    setShowPaymentDetailModal(true);
+  };
+
+  const handleViewDocument = (docId: string) => {
+    navigate(`/documents/${docId}`);
+  };
+
+  const getArchiveChecklist = () => {
+    const paymentExists = detailPayments.length > 0;
+    const complaintDoc = detailDocuments.find(d => d.type.includes('complaint') || d.type.includes('defense'));
+    const evidenceDoc = detailDocuments.find(d => d.type.includes('evidence'));
+    const opinionDoc = detailDocuments.find(d => d.type.includes('opinion') || d.type.includes('agency'));
+    const recordDoc = detailDocuments.find(d => d.type.includes('record'));
+    const judgmentDoc = detailDocuments.find(d => d.type.includes('judgment'));
+
+    return [
+      {
+        name: '委托合同',
+        exists: true,
+        isFixed: true,
+        archiveTime: detailArchive?.archiveAt,
+      },
+      {
+        name: '收费凭证',
+        exists: paymentExists,
+        payment: paymentExists ? detailPayments[0] : null,
+        archiveTime: paymentExists ? detailPayments[0].payAt || detailPayments[0].createdAt : null,
+      },
+      {
+        name: '起诉状/答辩状',
+        exists: !!complaintDoc,
+        document: complaintDoc,
+        archiveTime: complaintDoc?.createdAt,
+      },
+      {
+        name: '证据目录',
+        exists: !!evidenceDoc,
+        document: evidenceDoc,
+        archiveTime: evidenceDoc?.createdAt,
+      },
+      {
+        name: '代理词',
+        exists: !!opinionDoc,
+        document: opinionDoc,
+        archiveTime: opinionDoc?.createdAt,
+      },
+      {
+        name: '庭审笔录',
+        exists: !!recordDoc,
+        document: recordDoc,
+        archiveTime: recordDoc?.createdAt,
+      },
+      {
+        name: '判决书/裁定书',
+        exists: !!judgmentDoc,
+        document: judgmentDoc,
+        archiveTime: judgmentDoc?.createdAt,
+      },
+    ];
+  };
+
   const totalPages = Math.ceil(total / pageSize);
 
   const getBadgeClass = (color: string) => {
@@ -249,6 +332,24 @@ const Archive: React.FC = () => {
     }
     
     return pages;
+  };
+
+  const getInvoiceStatusText = (status: string) => {
+    const map: Record<string, string> = {
+      'none': '未开票',
+      'issued': '已开票',
+      'void': '已作废',
+    };
+    return map[status] || status;
+  };
+
+  const getInvoiceStatusClass = (status: string) => {
+    const map: Record<string, string> = {
+      'none': 'badge badge-neutral',
+      'issued': 'badge badge-success',
+      'void': 'badge badge-danger',
+    };
+    return map[status] || 'badge badge-neutral';
   };
 
   const statCards = [
@@ -661,8 +762,8 @@ const Archive: React.FC = () => {
 
       {showDetailModal && detailArchive && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 animate-fade-in">
-            <div className="flex items-center justify-between p-4 border-b border-neutral-200">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 animate-fade-in max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-neutral-200 flex-shrink-0">
               <h3 className="font-medium text-neutral-700">卷宗详情</h3>
               <button
                 onClick={() => setShowDetailModal(false)}
@@ -671,7 +772,7 @@ const Archive: React.FC = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-4 space-y-5">
+            <div className="p-4 space-y-5 overflow-y-auto flex-1">
               <div>
                 <h4 className="text-sm font-medium text-neutral-500 mb-3">基本信息</h4>
                 <div className="grid grid-cols-2 gap-3">
@@ -702,43 +803,185 @@ const Archive: React.FC = () => {
                   </div>
                 </div>
               </div>
+
               <div>
                 <h4 className="text-sm font-medium text-neutral-500 mb-3 flex items-center gap-1.5">
                   <ListChecks className="w-4 h-4" />
-                  归档清单
+                  归档材料清单
                 </h4>
-                <div className="border border-neutral-200 rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-neutral-50">
-                        <th className="px-3 py-2 text-left text-xs font-medium text-neutral-500">文件名称</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-neutral-500">文件类型</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-neutral-500">归档时间</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-neutral-100">
-                      {ARCHIVE_CHECKLIST.map((item, index) => (
-                        <tr key={index} className="hover:bg-neutral-50">
-                          <td className="px-3 py-2 text-sm text-neutral-700">
-                            <div className="flex items-center gap-1.5">
-                              <FileText className="w-3.5 h-3.5 text-neutral-400" />
-                              {item.name}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-sm text-neutral-500">{item.type}</td>
-                          <td className="px-3 py-2 text-sm text-neutral-500">
-                            {detailArchive.archiveAt ? formatDate(detailArchive.archiveAt) : '-'}
-                          </td>
+                {detailLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <RefreshCw className="w-8 h-8 animate-spin text-primary-500" />
+                  </div>
+                ) : (
+                  <div className="border border-neutral-200 rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-neutral-50">
+                          <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500 w-12">序号</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">归档材料</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500 w-24">状态</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500 w-36">归档时间</th>
+                          <th className="px-4 py-2.5 text-center text-xs font-medium text-neutral-500 w-24">操作</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-100">
+                        {getArchiveChecklist().map((item, index) => (
+                          <tr key={index} className="hover:bg-neutral-50">
+                            <td className="px-4 py-3 text-sm text-neutral-500">{index + 1}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <FileText className={cn("w-4 h-4", item.exists ? "text-primary-400" : "text-neutral-300")} />
+                                <span className={cn("text-sm", item.exists ? "text-neutral-700" : "text-neutral-400")}>
+                                  {item.name}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {item.exists ? (
+                                <span className="badge badge-success">已归档</span>
+                              ) : (
+                                <span className="badge badge-neutral">待补齐</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-neutral-500">
+                              {item.exists && item.archiveTime ? formatDate(item.archiveTime) : '-'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-center">
+                                {item.exists ? (
+                                  item.payment ? (
+                                    <button
+                                      onClick={() => handleViewPayment(item.payment!)}
+                                      className="p-1.5 text-neutral-500 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors"
+                                      title="查看费用详情"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </button>
+                                  ) : item.document ? (
+                                    <button
+                                      onClick={() => handleViewDocument(item.document!.id)}
+                                      className="p-1.5 text-neutral-500 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors"
+                                      title="查看文书"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </button>
+                                  ) : (
+                                    <span className="text-xs text-success-600">-</span>
+                                  )
+                                ) : (
+                                  <span className="text-xs text-neutral-400">待补充</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
-            <div className="flex items-center justify-end p-4 border-t border-neutral-200">
+            <div className="flex items-center justify-end p-4 border-t border-neutral-200 flex-shrink-0">
               <button
                 onClick={() => setShowDetailModal(false)}
+                className="btn-secondary"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPaymentDetailModal && detailPayment && (
+        <div
+          className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 animate-fade-in"
+          onClick={() => setShowPaymentDetailModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-lg w-full animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between bg-primary-50">
+              <h2 className="text-lg font-semibold text-primary-600">收费详情</h2>
+              <button
+                onClick={() => setShowPaymentDetailModal(false)}
+                className="text-neutral-400 hover:text-neutral-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-neutral-500">案件名称</label>
+                  <p className="text-sm text-neutral-700 font-medium mt-1">{detailPayment.caseName}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-neutral-500">客户名称</label>
+                  <p className="text-sm text-neutral-700 font-medium mt-1">{detailPayment.clientName}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-neutral-500">收费类型</label>
+                  <p className="text-sm text-neutral-700 mt-1">{PAYMENT_TYPE_MAP[detailPayment.type]}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-neutral-500">收费阶段</label>
+                  <p className="text-sm text-neutral-700 mt-1">{PAYMENT_STAGE_MAP[detailPayment.stage]}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-neutral-500">应收金额</label>
+                  <p className="text-sm text-neutral-700 font-mono font-medium mt-1">{formatCurrency(detailPayment.amount)}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-neutral-500">已收金额</label>
+                  <p className="text-sm text-primary-600 font-mono font-medium mt-1">{formatCurrency(detailPayment.paidAmount)}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-neutral-500">收费状态</label>
+                  <div className="mt-1">
+                    <span className={cn(getBadgeClass(PAYMENT_STATUS_MAP[detailPayment.status].color))}>
+                      {PAYMENT_STATUS_MAP[detailPayment.status].label}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm text-neutral-500">开票状态</label>
+                  <div className="mt-1">
+                    <span className={cn(getInvoiceStatusClass(detailPayment.invoiceStatus))}>
+                      {getInvoiceStatusText(detailPayment.invoiceStatus)}
+                    </span>
+                    {detailPayment.invoiceNo && (
+                      <span className="text-xs text-neutral-400 ml-2">{detailPayment.invoiceNo}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {detailPayment.payAt && (
+                <div>
+                  <label className="text-sm text-neutral-500">缴费时间</label>
+                  <p className="text-sm text-neutral-700 mt-1">{formatDateTime(detailPayment.payAt)}</p>
+                </div>
+              )}
+              {detailPayment.remark && (
+                <div>
+                  <label className="text-sm text-neutral-500">备注</label>
+                  <div className="mt-1 p-3 bg-neutral-50 rounded-lg text-sm text-neutral-700">
+                    {detailPayment.remark}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-neutral-200 bg-neutral-50 flex justify-end">
+              <button
+                onClick={() => setShowPaymentDetailModal(false)}
                 className="btn-secondary"
               >
                 关闭

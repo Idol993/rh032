@@ -25,11 +25,18 @@ import {
   CheckCircle2,
   AlertCircle,
   Award,
+  AlertTriangle,
+  Plus,
+  X,
+  ShieldAlert,
+  DollarSign,
 } from 'lucide-react';
-import { Case, Document, Payment, CaseLog, Evidence } from '@/types';
+import { Case, Document, Payment, CaseLog, Evidence, RiskTicket, CloseCaseResult } from '@/types';
 import { caseService } from '@/services/caseService';
 import { documentService } from '@/services/documentService';
 import { paymentService } from '@/services/paymentService';
+import { riskTicketService } from '@/services/riskTicketService';
+import { useUserStore } from '@/store/useUserStore';
 import {
   CASE_STATUS_MAP,
   CASE_TYPE_MAP,
@@ -38,10 +45,14 @@ import {
   PAYMENT_STATUS_MAP,
   PAYMENT_TYPE_MAP,
   PAYMENT_STAGE_MAP,
+  RISK_LEVEL_MAP,
+  RISK_STATUS_MAP,
+  RISK_TYPE_MAP,
+  CLOSE_CASE_RESULT_MAP,
 } from '@/constants';
 import { formatCurrency, formatDateTime, cn } from '@/utils';
 
-type TabKey = 'progress' | 'documents' | 'evidence' | 'payments' | 'logs';
+type TabKey = 'progress' | 'documents' | 'evidence' | 'payments' | 'logs' | 'risks';
 
 type ProgressStepStatus = 'done' | 'current' | 'pending';
 
@@ -52,23 +63,68 @@ interface ProgressStep {
   status: ProgressStepStatus;
 }
 
+interface AddProgressForm {
+  description: string;
+  documentIds: string[];
+  paymentIds: string[];
+  remark: string;
+}
+
+interface CloseCaseForm {
+  reason: string;
+  result: CloseCaseResult;
+  judgmentAmount?: number;
+}
+
+interface HandleRiskForm {
+  result: string;
+  status: 'processing' | 'resolved' | 'closed';
+}
+
 const CaseDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { currentUser } = useUserStore();
 
   const [caseData, setCaseData] = useState<Case | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [caseLogs, setCaseLogs] = useState<CaseLog[]>([]);
   const [evidenceList, setEvidenceList] = useState<Evidence[]>([]);
+  const [riskTickets, setRiskTickets] = useState<RiskTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('progress');
+
+  const [showAddProgressModal, setShowAddProgressModal] = useState(false);
+  const [showCloseCaseModal, setShowCloseCaseModal] = useState(false);
+  const [showHandleRiskModal, setShowHandleRiskModal] = useState(false);
+  const [selectedRisk, setSelectedRisk] = useState<RiskTicket | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [progressForm, setProgressForm] = useState<AddProgressForm>({
+    description: '',
+    documentIds: [],
+    paymentIds: [],
+    remark: '',
+  });
+
+  const [closeCaseForm, setCloseCaseForm] = useState<CloseCaseForm>({
+    reason: '',
+    result: 'win',
+    judgmentAmount: undefined,
+  });
+
+  const [handleRiskForm, setHandleRiskForm] = useState<HandleRiskForm>({
+    result: '',
+    status: 'processing',
+  });
 
   const tabs = [
     { key: 'progress' as TabKey, label: '案件进度', icon: Clock },
     { key: 'documents' as TabKey, label: '文书列表', icon: FileText },
     { key: 'evidence' as TabKey, label: '证据材料', icon: Paperclip },
     { key: 'payments' as TabKey, label: '费用记录', icon: Wallet },
+    { key: 'risks' as TabKey, label: '风险预警', icon: AlertTriangle },
     { key: 'logs' as TabKey, label: '操作日志', icon: History },
   ];
 
@@ -76,16 +132,18 @@ const CaseDetail: React.FC = () => {
     if (!id) return;
     setLoading(true);
     try {
-      const [caseResult, docsResult, paymentsResult, logsResult] = await Promise.all([
+      const [caseResult, docsResult, paymentsResult, logsResult, risksResult] = await Promise.all([
         caseService.getById(id),
         documentService.getDocuments({ caseId: id, page: 1, pageSize: 100 }),
         paymentService.getPayments({ caseId: id, page: 1, pageSize: 100 }),
         caseService.getCaseLogs(id),
+        riskTicketService.getTickets({ caseId: id, page: 1, pageSize: 100 }),
       ]);
       setCaseData(caseResult);
       setDocuments(docsResult.list);
       setPayments(paymentsResult.list);
       setCaseLogs(logsResult);
+      setRiskTickets(risksResult.list);
       setEvidenceList([]);
     } catch (error) {
       console.error('获取案件详情失败:', error);
@@ -106,19 +164,124 @@ const CaseDetail: React.FC = () => {
     navigate(`/cases/${id}/edit`);
   };
 
-  const handleCloseCase = () => {
-    if (!id) return;
-    if (window.confirm('确定要申请结案吗？')) {
-      caseService.closeCase(id).then(() => {
-        fetchCaseDetail();
-      });
-    }
-  };
-
   const handleArchive = () => {
     if (window.confirm('确定要申请归档吗？')) {
       alert('归档申请已提交');
     }
+  };
+
+  const handleCloseCaseClick = () => {
+    setCloseCaseForm({
+      reason: '',
+      result: 'win',
+      judgmentAmount: undefined,
+    });
+    setShowCloseCaseModal(true);
+  };
+
+  const handleCloseCaseSubmit = async () => {
+    if (!id || !currentUser || !closeCaseForm.reason.trim()) return;
+    setSubmitting(true);
+    try {
+      await caseService.closeCase(id, {
+        reason: closeCaseForm.reason,
+        result: closeCaseForm.result,
+        judgmentAmount: closeCaseForm.judgmentAmount,
+        applicantId: currentUser.id,
+        applicantName: currentUser.name,
+      });
+      setShowCloseCaseModal(false);
+      fetchCaseDetail();
+    } catch (error) {
+      console.error('结案申请失败:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAddProgressClick = () => {
+    setProgressForm({
+      description: '',
+      documentIds: [],
+      paymentIds: [],
+      remark: '',
+    });
+    setShowAddProgressModal(true);
+  };
+
+  const handleAddProgressSubmit = async () => {
+    if (!id || !currentUser || !progressForm.description.trim()) return;
+    setSubmitting(true);
+    try {
+      await caseService.addProgress(id, {
+        description: progressForm.description,
+        documentIds: progressForm.documentIds,
+        paymentIds: progressForm.paymentIds,
+        remark: progressForm.remark,
+        operatorId: currentUser.id,
+        operatorName: currentUser.name,
+      });
+      setShowAddProgressModal(false);
+      fetchCaseDetail();
+    } catch (error) {
+      console.error('新增进度记录失败:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRiskClick = (risk: RiskTicket) => {
+    setSelectedRisk(risk);
+    setHandleRiskForm({
+      result: '',
+      status: 'processing',
+    });
+    setShowHandleRiskModal(true);
+  };
+
+  const handleRiskSubmit = async () => {
+    if (!selectedRisk || !currentUser || !handleRiskForm.result.trim()) return;
+    setSubmitting(true);
+    try {
+      await riskTicketService.handleTicket(selectedRisk.id, {
+        status: handleRiskForm.status,
+        result: handleRiskForm.result,
+        handlerId: currentUser.id,
+        handlerName: currentUser.name,
+      });
+      await caseService.addCaseLog(
+        selectedRisk.caseId,
+        '风险处理',
+        currentUser.id,
+        currentUser.name,
+        `处理风险[${selectedRisk.title}]：${handleRiskForm.result}`
+      );
+      setShowHandleRiskModal(false);
+      setSelectedRisk(null);
+      fetchCaseDetail();
+    } catch (error) {
+      console.error('风险处理失败:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const toggleDocumentSelection = (docId: string) => {
+    setProgressForm((prev) => ({
+      ...prev,
+      documentIds: prev.documentIds.includes(docId)
+        ? prev.documentIds.filter((d) => d !== docId)
+        : [...prev.documentIds, docId],
+    }));
+  };
+
+  const togglePaymentSelection = (paymentId: string) => {
+    setProgressForm((prev) => ({
+      ...prev,
+      paymentIds: prev.paymentIds.includes(paymentId)
+        ? prev.paymentIds.filter((p) => p !== paymentId)
+        : [...prev.paymentIds, paymentId],
+    }));
   };
 
   const getBadgeClass = (color: string) => {
@@ -130,6 +293,17 @@ const CaseDetail: React.FC = () => {
       'badge-neutral': 'badge badge-neutral',
     };
     return colorMap[color] || 'badge badge-neutral';
+  };
+
+  const getRiskIcon = (type: string) => {
+    switch (type) {
+      case 'deadline_overdue':
+        return Clock;
+      case 'fee_dispute':
+        return DollarSign;
+      default:
+        return ShieldAlert;
+    }
   };
 
   const progressSteps: ProgressStep[] = caseData
@@ -189,6 +363,59 @@ const CaseDetail: React.FC = () => {
     );
   }
 
+  const renderCloseCaseCard = () => {
+    if (!caseData.closeReason && !caseData.closeResult) return null;
+    return (
+      <div className="mb-6 p-5 bg-gradient-to-r from-primary-50 to-success-50 rounded-xl border border-primary-100">
+        <div className="flex items-center gap-2 mb-4">
+          <FileCheck className="w-5 h-5 text-primary-600" />
+          <h3 className="font-semibold text-primary-800">结案信息</h3>
+          <span className="ml-auto badge badge-success">
+            {caseData.closeApprovalStatus === 'approved' ? '已通过' : caseData.closeApprovalStatus === 'rejected' ? '已驳回' : '审批中'}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-xs text-neutral-500 mb-1">申请人</p>
+            <p className="font-medium text-neutral-700">{caseData.closeApplicantName || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-neutral-500 mb-1">申请时间</p>
+            <p className="font-medium text-neutral-700">{caseData.closeAppliedAt ? formatDateTime(caseData.closeAppliedAt) : '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-neutral-500 mb-1">案件结果</p>
+            <p className="font-medium text-neutral-700">{caseData.closeResult ? CLOSE_CASE_RESULT_MAP[caseData.closeResult] : '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-neutral-500 mb-1">判决金额</p>
+            <p className="font-medium text-neutral-700 font-mono">
+              {caseData.closeJudgmentAmount != null ? `¥${formatCurrency(caseData.closeJudgmentAmount)}` : '-'}
+            </p>
+          </div>
+        </div>
+        {caseData.closeReason && (
+          <div className="mt-4">
+            <p className="text-xs text-neutral-500 mb-1">结案理由</p>
+            <p className="text-sm text-neutral-700 leading-relaxed">{caseData.closeReason}</p>
+          </div>
+        )}
+        {caseData.closeApproverName && (
+          <div className="mt-4 pt-4 border-t border-primary-100 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+            <div>
+              <p className="text-xs text-neutral-500 mb-1">审批人</p>
+              <p className="font-medium text-neutral-700">{caseData.closeApproverName}</p>
+            </div>
+            <div>
+              <p className="text-xs text-neutral-500 mb-1">审批时间</p>
+              <p className="font-medium text-neutral-700">{caseData.closeApprovedAt ? formatDateTime(caseData.closeApprovedAt) : '-'}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="p-6">
       <div className="flex items-center gap-2 text-sm text-neutral-500 mb-4">
@@ -238,7 +465,7 @@ const CaseDetail: React.FC = () => {
           </button>
           {caseData.status !== 'closed' && caseData.status !== 'archived' && (
             <button
-              onClick={handleCloseCase}
+              onClick={handleCloseCaseClick}
               className="btn-success flex items-center gap-2"
             >
               <FileCheck className="w-4 h-4" />
@@ -467,6 +694,11 @@ const CaseDetail: React.FC = () => {
               >
                 <Icon className="w-4 h-4" />
                 {tab.label}
+                {tab.key === 'risks' && riskTickets.filter((r) => r.status === 'pending').length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 text-xs bg-danger-500 text-white rounded-full">
+                    {riskTickets.filter((r) => r.status === 'pending').length}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -475,6 +707,17 @@ const CaseDetail: React.FC = () => {
         <div className="pt-4">
           {activeTab === 'progress' && (
             <div className="py-4">
+              {renderCloseCaseCard()}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-neutral-700">案件办理进度</h3>
+                <button
+                  onClick={handleAddProgressClick}
+                  className="btn-primary flex items-center gap-1.5 text-sm py-2 px-3"
+                >
+                  <Plus className="w-4 h-4" />
+                  新增进度记录
+                </button>
+              </div>
               <div className="relative">
                 <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-neutral-200" />
                 <div className="space-y-6">
@@ -668,8 +911,88 @@ const CaseDetail: React.FC = () => {
             </div>
           )}
 
+          {activeTab === 'risks' && (
+            <div className="py-2">
+              {riskTickets.length === 0 ? (
+                <div className="text-center py-12">
+                  <ShieldAlert className="w-12 h-12 text-neutral-300 mx-auto mb-3" />
+                  <p className="text-neutral-500 text-sm">暂无风险记录</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {riskTickets.map((risk) => {
+                    const RiskIcon = getRiskIcon(risk.type);
+                    return (
+                      <div
+                        key={risk.id}
+                        className={cn(
+                          'p-4 rounded-lg border transition-colors',
+                          risk.level === 'critical' || risk.level === 'high'
+                            ? 'bg-danger-50 border-danger-200 hover:border-danger-300'
+                            : risk.level === 'medium'
+                            ? 'bg-warning-50 border-warning-200 hover:border-warning-300'
+                            : 'bg-neutral-50 border-neutral-200 hover:border-neutral-300'
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={cn(
+                              'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
+                              risk.level === 'critical' || risk.level === 'high'
+                                ? 'bg-danger-500 text-white'
+                                : risk.level === 'medium'
+                                ? 'bg-warning-500 text-white'
+                                : 'bg-neutral-400 text-white'
+                            )}
+                          >
+                            <RiskIcon className="w-5 h-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-medium text-neutral-800">{risk.title}</h4>
+                              <span className={cn(getBadgeClass(RISK_LEVEL_MAP[risk.level].color))}>
+                                {RISK_LEVEL_MAP[risk.level].label}
+                              </span>
+                              <span className={cn(getBadgeClass(RISK_STATUS_MAP[risk.status].color))}>
+                                {RISK_STATUS_MAP[risk.status].label}
+                              </span>
+                              <span className="text-xs text-neutral-500">
+                                {RISK_TYPE_MAP[risk.type]}
+                              </span>
+                            </div>
+                            <p className="text-sm text-neutral-600 mt-1.5">{risk.description}</p>
+                            <div className="flex items-center gap-4 mt-3 text-xs text-neutral-500">
+                              <span>报告人：{risk.reporterName}</span>
+                              <span>报告时间：{formatDateTime(risk.createdAt)}</span>
+                              {risk.handlerName && <span>处理人：{risk.handlerName}</span>}
+                            </div>
+                          </div>
+                          {(risk.status === 'pending' || risk.status === 'processing') && (
+                            <button
+                              onClick={() => handleRiskClick(risk)}
+                              className="btn-primary text-sm py-1.5 px-3 flex-shrink-0"
+                            >
+                              处理
+                            </button>
+                          )}
+                        </div>
+                        {risk.result && (risk.status === 'resolved' || risk.status === 'closed') && (
+                          <div className="mt-3 pt-3 border-t border-neutral-200">
+                            <p className="text-xs text-neutral-500 mb-1">处理结果</p>
+                            <p className="text-sm text-neutral-700">{risk.result}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'logs' && (
             <div className="py-2">
+              {renderCloseCaseCard()}
               {caseLogs.length === 0 ? (
                 <div className="text-center py-12">
                   <History className="w-12 h-12 text-neutral-300 mx-auto mb-3" />
@@ -709,6 +1032,266 @@ const CaseDetail: React.FC = () => {
           )}
         </div>
       </div>
+
+      {showAddProgressModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 bg-gradient-to-r from-[#0F2B5B] to-[#1E4976] rounded-t-xl">
+              <h3 className="text-white font-semibold flex items-center gap-2">
+                <Plus className="w-5 h-5" />
+                新增进度记录
+              </h3>
+              <button
+                onClick={() => setShowAddProgressModal(false)}
+                className="text-white/80 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  办理事项描述 <span className="text-danger-500">*</span>
+                </label>
+                <textarea
+                  value={progressForm.description}
+                  onChange={(e) => setProgressForm({ ...progressForm, description: e.target.value })}
+                  rows={3}
+                  className="w-input"
+                  placeholder="请输入办理事项描述..."
+                />
+              </div>
+              {documents.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                    关联文书
+                  </label>
+                  <div className="space-y-2 max-h-32 overflow-y-auto p-3 bg-neutral-50 rounded-lg border border-neutral-200">
+                    {documents.map((doc) => (
+                      <label key={doc.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={progressForm.documentIds.includes(doc.id)}
+                          onChange={() => toggleDocumentSelection(doc.id)}
+                          className="w-4 h-4 text-primary-600 rounded"
+                        />
+                        <span className="text-sm text-neutral-700">{doc.title}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {payments.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                    关联费用
+                  </label>
+                  <div className="space-y-2 max-h-32 overflow-y-auto p-3 bg-neutral-50 rounded-lg border border-neutral-200">
+                    {payments.map((payment) => (
+                      <label key={payment.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={progressForm.paymentIds.includes(payment.id)}
+                          onChange={() => togglePaymentSelection(payment.id)}
+                          className="w-4 h-4 text-primary-600 rounded"
+                        />
+                        <span className="text-sm text-neutral-700">
+                          {PAYMENT_TYPE_MAP[payment.type]} - ¥{formatCurrency(payment.amount)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  备注
+                </label>
+                <textarea
+                  value={progressForm.remark}
+                  onChange={(e) => setProgressForm({ ...progressForm, remark: e.target.value })}
+                  rows={2}
+                  className="w-input"
+                  placeholder="请输入备注（选填）..."
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-neutral-200 bg-neutral-50 rounded-b-xl">
+              <button
+                onClick={() => setShowAddProgressModal(false)}
+                className="btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleAddProgressSubmit}
+                disabled={!progressForm.description.trim() || submitting}
+                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? '提交中...' : '提交'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCloseCaseModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 bg-gradient-to-r from-[#0F2B5B] to-[#1E4976] rounded-t-xl">
+              <h3 className="text-white font-semibold flex items-center gap-2">
+                <FileCheck className="w-5 h-5" />
+                结案申请
+              </h3>
+              <button
+                onClick={() => setShowCloseCaseModal(false)}
+                className="text-white/80 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  结案理由 <span className="text-danger-500">*</span>
+                </label>
+                <textarea
+                  value={closeCaseForm.reason}
+                  onChange={(e) => setCloseCaseForm({ ...closeCaseForm, reason: e.target.value })}
+                  rows={4}
+                  className="w-input"
+                  placeholder="请输入结案理由..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  案件结果 <span className="text-danger-500">*</span>
+                </label>
+                <select
+                  value={closeCaseForm.result}
+                  onChange={(e) => setCloseCaseForm({ ...closeCaseForm, result: e.target.value as CloseCaseResult })}
+                  className="w-input"
+                >
+                  {Object.entries(CLOSE_CASE_RESULT_MAP).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  判决金额（选填）
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">¥</span>
+                  <input
+                    type="number"
+                    value={closeCaseForm.judgmentAmount ?? ''}
+                    onChange={(e) => setCloseCaseForm({ 
+                      ...closeCaseForm, 
+                      judgmentAmount: e.target.value ? Number(e.target.value) : undefined 
+                    })}
+                    className="w-input pl-7"
+                    placeholder="请输入判决金额"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-neutral-200 bg-neutral-50 rounded-b-xl">
+              <button
+                onClick={() => setShowCloseCaseModal(false)}
+                className="btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCloseCaseSubmit}
+                disabled={!closeCaseForm.reason.trim() || submitting}
+                className="btn-success disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? '提交中...' : '提交结案申请'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showHandleRiskModal && selectedRisk && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 bg-gradient-to-r from-[#0F2B5B] to-[#1E4976] rounded-t-xl">
+              <h3 className="text-white font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5" />
+                处理风险
+              </h3>
+              <button
+                onClick={() => {
+                  setShowHandleRiskModal(false);
+                  setSelectedRisk(null);
+                }}
+                className="text-white/80 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div className="p-4 bg-danger-50 rounded-lg border border-danger-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={cn(getBadgeClass(RISK_LEVEL_MAP[selectedRisk.level].color))}>
+                    {RISK_LEVEL_MAP[selectedRisk.level].label}
+                  </span>
+                  <span className="text-xs text-neutral-500">{RISK_TYPE_MAP[selectedRisk.type]}</span>
+                </div>
+                <h4 className="font-medium text-neutral-800">{selectedRisk.title}</h4>
+                <p className="text-sm text-neutral-600 mt-1.5">{selectedRisk.description}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  处理说明 <span className="text-danger-500">*</span>
+                </label>
+                <textarea
+                  value={handleRiskForm.result}
+                  onChange={(e) => setHandleRiskForm({ ...handleRiskForm, result: e.target.value })}
+                  rows={4}
+                  className="w-input"
+                  placeholder="请输入处理说明..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  处理状态 <span className="text-danger-500">*</span>
+                </label>
+                <select
+                  value={handleRiskForm.status}
+                  onChange={(e) => setHandleRiskForm({ ...handleRiskForm, status: e.target.value as HandleRiskForm['status'] })}
+                  className="w-input"
+                >
+                  <option value="processing">处理中</option>
+                  <option value="resolved">已解决</option>
+                  <option value="closed">已关闭</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-neutral-200 bg-neutral-50 rounded-b-xl">
+              <button
+                onClick={() => {
+                  setShowHandleRiskModal(false);
+                  setSelectedRisk(null);
+                }}
+                className="btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRiskSubmit}
+                disabled={!handleRiskForm.result.trim() || submitting}
+                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? '提交中...' : '提交处理'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

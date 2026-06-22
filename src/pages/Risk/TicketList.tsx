@@ -109,7 +109,11 @@ const TicketList: React.FC = () => {
 
   const handleProcess = async (id: string) => {
     try {
-      await riskTicketService.handleTicket(id, 'current-user', '当前用户');
+      await riskTicketService.handleTicket(id, {
+        status: 'processing',
+        handlerId: 'current-user',
+        handlerName: '当前用户',
+      });
       fetchStatistics();
       fetchTickets();
     } catch (error) {

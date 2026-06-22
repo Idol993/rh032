@@ -21,6 +21,7 @@ import { caseService } from '@/services/caseService';
 import { deadlineService } from '@/services/deadlineService';
 import { paymentService } from '@/services/paymentService';
 import { operationLogService } from '@/services/operationLogService';
+import { riskTicketService } from '@/services/riskTicketService';
 import type { Deadline, OperationLog, CaseType } from '@/types';
 import { formatCurrency, formatDateTime } from '@/utils';
 import { cn } from '@/lib/utils';
@@ -57,6 +58,11 @@ const Dashboard: React.FC = () => {
     count: 0,
     thisMonth: 0,
   });
+  const [riskStats, setRiskStats] = useState({
+    pending: 0,
+    processing: 0,
+    total: 0,
+  });
   const [urgentDeadlines, setUrgentDeadlines] = useState<Deadline[]>([]);
   const [recentLogs, setRecentLogs] = useState<OperationLog[]>([]);
   const [caseTypeData, setCaseTypeData] = useState<{ name: string; value: number }[]>([]);
@@ -79,6 +85,7 @@ const Dashboard: React.FC = () => {
           caseStatsResult,
           deadlineStatsResult,
           paymentStatsResult,
+          riskStatsResult,
           urgentDeadlinesResult,
           logsResult,
           casesResult,
@@ -86,6 +93,7 @@ const Dashboard: React.FC = () => {
           caseService.getStatistics(),
           deadlineService.getStatistics(),
           paymentService.getStatistics(),
+          riskTicketService.getStatistics(),
           deadlineService.getUrgentDeadlines(5),
           operationLogService.getLogs({ page: 1, pageSize: 8 }),
           caseService.getCases(),
@@ -94,6 +102,7 @@ const Dashboard: React.FC = () => {
         setCaseStats(caseStatsResult);
         setDeadlineStats(deadlineStatsResult);
         setPaymentStats(paymentStatsResult);
+        setRiskStats(riskStatsResult);
         setUrgentDeadlines(urgentDeadlinesResult);
         setRecentLogs(logsResult.list);
 
@@ -330,19 +339,19 @@ const Dashboard: React.FC = () => {
       bgGradient: 'from-success-500 to-success-700',
     },
     {
-      title: '时限预警',
-      value: deadlineStats.urgent + deadlineStats.overdue,
+      title: '待处理风险',
+      value: riskStats.pending,
       icon: AlertTriangle,
       color: 'danger',
-      trend: `预警 ${deadlineStats.warning} 件`,
+      trend: `处理中 ${riskStats.processing} 件`,
       bgGradient: 'from-danger-500 to-danger-700',
     },
     {
-      title: '待办事项',
-      value: caseStats.pending,
-      icon: CheckSquare,
+      title: '时限预警',
+      value: deadlineStats.urgent + deadlineStats.overdue,
+      icon: Clock,
       color: 'warning',
-      trend: `已结案 ${caseStats.closed} 件`,
+      trend: `预警 ${deadlineStats.warning} 件`,
       bgGradient: 'from-warning-500 to-warning-700',
     },
   ];

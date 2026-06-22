@@ -36,19 +36,25 @@ interface Statistics {
 
 interface FormState {
   caseId: string;
+  caseName: string;
+  clientName: string;
   type: PaymentType;
   amount: number;
   paidAmount: number;
   stage: PaymentStage;
+  status: PaymentStatus;
   remark: string;
 }
 
 const initialFormState: FormState = {
   caseId: '',
+  caseName: '',
+  clientName: '',
   type: 'fixed',
   amount: 0,
   paidAmount: 0,
   stage: 'intake',
+  status: 'unpaid',
   remark: '',
 };
 
@@ -111,13 +117,10 @@ const Finance: React.FC = () => {
     }
   };
 
-  const fetchActiveCases = async () => {
+  const fetchAllCases = async () => {
     try {
       const result = await caseService.getCases({ pageSize: 999, page: 1 });
-      const activeCases = result.list.filter(
-        (c) => !['closed', 'archived'].includes(c.status)
-      );
-      setCases(activeCases);
+      setCases(result.list);
     } catch (error) {
       console.error('获取案件列表失败:', error);
     }
@@ -159,13 +162,16 @@ const Finance: React.FC = () => {
     setEditingId(payment.id);
     setFormData({
       caseId: payment.caseId,
+      caseName: payment.caseName,
+      clientName: payment.clientName,
       type: payment.type,
       amount: payment.amount,
       paidAmount: payment.paidAmount,
       stage: payment.stage,
+      status: payment.status,
       remark: payment.remark || '',
     });
-    fetchActiveCases();
+    fetchAllCases();
     setShowFormModal(true);
   };
 
@@ -173,18 +179,42 @@ const Finance: React.FC = () => {
     setFormMode('create');
     setEditingId('');
     setFormData(initialFormState);
-    fetchActiveCases();
+    fetchAllCases();
     setShowFormModal(true);
+  };
+
+  const computeStatusFromAmount = (paidAmount: number, amount: number): PaymentStatus => {
+    if (paidAmount <= 0) return 'unpaid';
+    if (paidAmount >= amount) return 'paid';
+    return 'partial';
+  };
+
+  const handlePaidAmountChange = (value: number) => {
+    const autoStatus = computeStatusFromAmount(value, formData.amount);
+    setFormData({
+      ...formData,
+      paidAmount: value,
+      status: autoStatus,
+    });
+  };
+
+  const handleAmountChange = (value: number) => {
+    const autoStatus = computeStatusFromAmount(formData.paidAmount, value);
+    setFormData({
+      ...formData,
+      amount: value,
+      status: autoStatus,
+    });
   };
 
   const handleFormSubmit = async () => {
     if (!formData.caseId) return;
     setSubmitting(true);
     try {
-      const selectedCase = cases.find((c) => c.id === formData.caseId);
-      if (!selectedCase) return;
-
       if (formMode === 'create') {
+        const selectedCase = cases.find((c) => c.id === formData.caseId);
+        if (!selectedCase) return;
+
         await paymentService.create({
           caseId: formData.caseId,
           caseName: selectedCase.name,
@@ -193,11 +223,7 @@ const Finance: React.FC = () => {
           amount: formData.amount,
           paidAmount: formData.paidAmount,
           stage: formData.stage,
-          status: formData.paidAmount >= formData.amount
-            ? 'paid'
-            : formData.paidAmount > 0
-              ? 'partial'
-              : 'unpaid',
+          status: formData.status,
           remark: formData.remark,
           payAt: formData.paidAmount > 0 ? new Date().toISOString() : undefined,
         });
@@ -207,12 +233,9 @@ const Finance: React.FC = () => {
           amount: formData.amount,
           paidAmount: formData.paidAmount,
           stage: formData.stage,
-          status: formData.paidAmount >= formData.amount
-            ? 'paid'
-            : formData.paidAmount > 0
-              ? 'partial'
-              : 'unpaid',
+          status: formData.status,
           remark: formData.remark,
+          payAt: formData.paidAmount > 0 ? (formData.paidAmount > 0 ? new Date().toISOString() : undefined) : undefined,
         });
       }
 
@@ -629,7 +652,15 @@ const Finance: React.FC = () => {
                 <label className="label-text">选择案件 <span className="text-danger-500">*</span></label>
                 <select
                   value={formData.caseId}
-                  onChange={(e) => setFormData({ ...formData, caseId: e.target.value })}
+                  onChange={(e) => {
+                    const selectedCase = cases.find(c => c.id === e.target.value);
+                    setFormData({
+                      ...formData,
+                      caseId: e.target.value,
+                      caseName: selectedCase?.name || '',
+                      clientName: selectedCase?.clientName || '',
+                    });
+                  }}
                   className="select-field"
                   disabled={formMode === 'edit'}
                 >
@@ -661,7 +692,7 @@ const Finance: React.FC = () => {
                   type="number"
                   min={0}
                   value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })}
+                  onChange={(e) => handleAmountChange(Number(e.target.value))}
                   className="input-field"
                   placeholder="请输入应收金额"
                 />
@@ -673,10 +704,24 @@ const Finance: React.FC = () => {
                   type="number"
                   min={0}
                   value={formData.paidAmount}
-                  onChange={(e) => setFormData({ ...formData, paidAmount: Number(e.target.value) })}
+                  onChange={(e) => handlePaidAmountChange(Number(e.target.value))}
                   className="input-field"
                   placeholder="请输入已收金额"
                 />
+              </div>
+
+              <div>
+                <label className="label-text">收款状态</label>
+                <select
+                  id="status"
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as PaymentStatus })}
+                  className="select-field"
+                >
+                  {Object.entries(PAYMENT_STATUS_MAP).map(([key, value]) => (
+                    <option key={key} value={key}>{value.label}</option>
+                  ))}
+                </select>
               </div>
 
               <div>

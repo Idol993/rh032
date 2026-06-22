@@ -135,6 +135,8 @@ export const documentService = {
           ...documents[index],
           currentVersion,
           content,
+          editorId,
+          editorName,
           updatedAt: now,
         };
         saveToStorage(STORAGE_KEYS.DOCUMENTS, documents);
@@ -153,6 +155,64 @@ export const documentService = {
         });
         saveToStorage(versionsKey, versions);
 
+        resolve(documents[index]);
+      }, 300);
+    });
+  },
+
+  async update(id: string, data: Partial<Document> & { 
+    content?: string; 
+    editorId?: string; 
+    editorName?: string; 
+    editNote?: string 
+  }): Promise<Document | null> {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const documents = getFromStorage<Document[]>(STORAGE_KEYS.DOCUMENTS, []);
+        const index = documents.findIndex(d => d.id === id);
+        if (index === -1) {
+          resolve(null);
+          return;
+        }
+
+        const now = new Date().toISOString();
+        const hasContentUpdate = data.content !== undefined && (data.editorId || documents[index].editorId);
+        
+        let updatedDoc: Document = {
+          ...documents[index],
+          ...data,
+          updatedAt: now,
+        };
+
+        if (hasContentUpdate && data.content !== undefined) {
+          const currentVersion = documents[index].currentVersion + 1;
+          const editorId = data.editorId || documents[index].editorId!;
+          const editorName = data.editorName || documents[index].editorName!;
+          
+          updatedDoc = {
+            ...updatedDoc,
+            currentVersion,
+            editorId,
+            editorName,
+          };
+
+          const versionsKey = `${STORAGE_KEYS.DOCUMENTS}_versions_${id}`;
+          const versions = getFromStorage<DocVersion[]>(versionsKey, []);
+          versions.push({
+            id: generateId(),
+            docId: id,
+            version: currentVersion,
+            content: data.content,
+            editorId,
+            editorName,
+            editNote: data.editNote || '内容更新',
+            createdAt: now,
+          });
+          saveToStorage(versionsKey, versions);
+        }
+
+        documents[index] = updatedDoc;
+        saveToStorage(STORAGE_KEYS.DOCUMENTS, documents);
         resolve(documents[index]);
       }, 300);
     });

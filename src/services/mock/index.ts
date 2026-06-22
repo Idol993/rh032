@@ -915,6 +915,291 @@ export function initMockData() {
   if (!localStorage.getItem(STORAGE_KEYS.ARCHIVES)) {
     saveToStorage(STORAGE_KEYS.ARCHIVES, mockArchives);
   }
+
+  const docVersionsKey001 = `${STORAGE_KEYS.DOCUMENTS}_versions_doc_001`;
+  if (!localStorage.getItem(docVersionsKey001)) {
+    saveToStorage(docVersionsKey001, [
+      {
+        id: 'ver_001_3',
+        docId: 'doc_001',
+        version: 3,
+        content: `民事起诉状
+
+原告：北京宏达科技有限公司
+住所地：北京市海淀区中关村大街1号
+法定代表人：张总
+联系电话：010-88888888
+
+被告：天津某建材公司
+住所地：天津市某某区某某路某某号
+法定代表人：某某
+联系电话：022-xxxxxxx
+
+诉讼请求：
+1. 判令被告支付货款人民币580,000元及逾期利息；
+2. 判令被告承担本案全部诉讼费用。
+
+事实与理由：
+原告与被告于2023年10月签订买卖合同，约定原告向被告供应建材产品。原告依约履行供货义务后，被告未按约定支付货款。截至起诉之日，被告尚欠原告货款共计人民币580,000元。经原告多次催要，被告均以各种理由拖延。为维护原告合法权益，特向贵院提起诉讼，请求依法判如所请。
+
+此致
+北京市朝阳区人民法院
+
+具状人：北京宏达科技有限公司
+2024年2月25日`,
+        editorId: 'user_003',
+        editorName: '王律师',
+        editNote: '补充诉讼请求和事实理由细节',
+        createdAt: '2024-02-25T14:30:00Z',
+      },
+      {
+        id: 'ver_001_2',
+        docId: 'doc_001',
+        version: 2,
+        content: `民事起诉状
+
+原告：北京宏达科技有限公司
+住所地：北京市海淀区中关村大街1号
+法定代表人：张总
+
+被告：天津某建材公司
+住所地：天津市某某区某某路某某号
+
+诉讼请求：
+1. 判令被告支付货款人民币580,000元；
+2. 判令被告承担本案诉讼费用。
+
+事实与理由：
+原告与被告签订买卖合同，原告供货后被告未支付货款。经原告多次催要未果。为维护原告合法权益，特向贵院提起诉讼。
+
+此致
+北京市朝阳区人民法院
+
+具状人：北京宏达科技有限公司
+2024年2月23日`,
+        editorId: 'user_003',
+        editorName: '王律师',
+        editNote: '完善被告信息和诉讼请求',
+        createdAt: '2024-02-23T10:15:00Z',
+      },
+      {
+        id: 'ver_001_1',
+        docId: 'doc_001',
+        version: 1,
+        content: `民事起诉状
+
+原告：北京宏达科技有限公司
+
+被告：天津某建材公司
+
+诉讼请求：
+1. 支付货款
+
+事实与理由：
+买卖合同纠纷`,
+        editorId: 'user_005',
+        editorName: '刘小助',
+        editNote: '初始版本',
+        createdAt: '2024-02-21T09:00:00Z',
+      },
+    ]);
+  }
+
+  const docVersionsKey002 = `${STORAGE_KEYS.DOCUMENTS}_versions_doc_002`;
+  if (!localStorage.getItem(docVersionsKey002)) {
+    saveToStorage(docVersionsKey002, [
+      {
+        id: 'ver_002_2',
+        docId: 'doc_002',
+        version: 2,
+        content: `证据目录
+
+案号：（2024）京0105民初XXXXX号
+
+原告：北京宏达科技有限公司
+被告：天津某建材公司
+
+序号 证据名称        证明对象                          页码
+1    买卖合同原件    证明原被告之间存在合法有效的买卖合同关系    1-5
+2    送货单          证明原告已按约定履行供货义务               6-12
+3    对账单          证明被告确认欠款金额                     13-15
+4    催款函          证明原告多次向被告催要货款                 16-18
+5    付款记录        证明被告支付部分货款的事实                 19-20
+
+提交人：北京宏达科技有限公司
+2024年2月26日`,
+        editorId: 'user_005',
+        editorName: '刘小助',
+        editNote: '补充完整证据清单和页码',
+        createdAt: '2024-02-26T10:00:00Z',
+      },
+      {
+        id: 'ver_002_1',
+        docId: 'doc_002',
+        version: 1,
+        content: `证据目录
+
+原告：北京宏达科技有限公司
+被告：天津某建材公司
+
+1. 买卖合同
+2. 送货单
+3. 对账单
+4. 催款函`,
+        editorId: 'user_005',
+        editorName: '刘小助',
+        editNote: '初始版本',
+        createdAt: '2024-02-22T09:00:00Z',
+      },
+    ]);
+  }
+
+  const docVersionsKey004 = `${STORAGE_KEYS.DOCUMENTS}_versions_doc_004`;
+  if (!localStorage.getItem(docVersionsKey004)) {
+    saveToStorage(docVersionsKey004, [
+      {
+        id: 'ver_004_2',
+        docId: 'doc_004',
+        version: 2,
+        content: `代理词
+
+尊敬的审判长、审判员：
+
+受原告深圳创新电子有限公司的委托，我作为其诉讼代理人参与本案诉讼。现结合庭审情况，发表如下代理意见：
+
+一、被告生产的产品落入原告专利权保护范围
+二、被告侵权行为给原告造成了重大经济损失
+三、原告主张的赔偿金额合理合法
+
+综上所述，被告的行为已构成专利侵权，请求贵院依法支持原告的全部诉讼请求。
+
+代理人：陈律师
+2024年2月15日`,
+        editorId: 'user_004',
+        editorName: '陈律师',
+        editNote: '完善代理意见要点',
+        createdAt: '2024-02-15T16:00:00Z',
+      },
+      {
+        id: 'ver_004_1',
+        docId: 'doc_004',
+        version: 1,
+        content: `代理词
+
+尊敬的审判长、审判员：
+
+受原告委托，参与本案诉讼。现发表代理意见如下：
+
+一、被告构成专利侵权
+二、请求支持原告诉讼请求
+
+代理人：陈律师
+2024年2月10日`,
+        editorId: 'user_004',
+        editorName: '陈律师',
+        editNote: '初始版本',
+        createdAt: '2024-02-10T09:00:00Z',
+      },
+    ]);
+  }
+
+  const docVersionsKey005 = `${STORAGE_KEYS.DOCUMENTS}_versions_doc_005`;
+  if (!localStorage.getItem(docVersionsKey005)) {
+    saveToStorage(docVersionsKey005, [
+      {
+        id: 'ver_005_4',
+        docId: 'doc_005',
+        version: 4,
+        content: `仲裁代理意见
+
+尊敬的仲裁员：
+
+受申请人李娜的委托，我作为其仲裁代理人，现发表如下代理意见：
+
+一、被申请人违法解除劳动合同事实清楚、证据确凿
+1. 被申请人未对申请人进行有效的绩效考核
+2. 被申请人据以解除劳动合同的规章制度未经民主程序制定
+3. 被申请人解除劳动合同前未履行通知工会的法定程序
+
+二、被申请人应支付违法解除劳动合同的赔偿金
+申请人在被申请人处工作年限为5年，月平均工资为12,000元，故被申请人应支付的赔偿金为：
+12,000元 × 5个月 × 2倍 = 120,000元
+
+三、被申请人应支付申请人未休年休假工资
+
+综上所述，被申请人解除劳动合同的行为违反法律规定，请求仲裁庭依法支持申请人的全部仲裁请求。
+
+代理人：李建国
+2023年12月5日`,
+        editorId: 'user_002',
+        editorName: '李建国',
+        editNote: '完善赔偿金计算方式和法律依据',
+        createdAt: '2023-12-05T11:00:00Z',
+      },
+      {
+        id: 'ver_005_3',
+        docId: 'doc_005',
+        version: 3,
+        content: `仲裁代理意见
+
+尊敬的仲裁员：
+
+受申请人李娜的委托，现发表如下代理意见：
+
+一、被申请人违法解除劳动合同
+1. 绩效考核不符合法定要求
+2. 规章制度未经民主程序
+3. 未通知工会
+
+二、被申请人应支付赔偿金12万元
+
+三、被申请人应支付未休年休假工资
+
+请求仲裁庭支持申请人的仲裁请求。
+
+代理人：李建国
+2023年11月28日`,
+        editorId: 'user_002',
+        editorName: '李建国',
+        editNote: '补充主要事实和理由',
+        createdAt: '2023-11-28T15:30:00Z',
+      },
+      {
+        id: 'ver_005_2',
+        docId: 'doc_005',
+        version: 2,
+        content: `仲裁代理意见
+
+尊敬的仲裁员：
+
+受申请人李娜的委托，现发表如下代理意见：
+
+一、被申请人违法解除劳动合同
+二、被申请人应支付赔偿金
+
+请求支持申请人的仲裁请求。
+
+代理人：李建国
+2023年11月22日`,
+        editorId: 'user_002',
+        editorName: '李建国',
+        editNote: '草拟代理意见框架',
+        createdAt: '2023-11-22T09:20:00Z',
+      },
+      {
+        id: 'ver_005_1',
+        docId: 'doc_005',
+        version: 1,
+        content: `仲裁代理意见
+
+代理人：李建国`,
+        editorId: 'user_002',
+        editorName: '李建国',
+        editNote: '初始版本',
+        createdAt: '2023-11-20T09:00:00Z',
+      },
+    ]);
+  }
 }
 
 export { getFromStorage, saveToStorage };

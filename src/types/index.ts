@@ -80,6 +80,8 @@ export interface Client {
   createdAt: string;
 }
 
+export type CloseCaseResult = 'win' | 'mediation' | 'lose' | 'withdraw' | 'other';
+
 export interface Case {
   id: string;
   caseNo: string;
@@ -106,6 +108,16 @@ export interface Case {
   createdAt: string;
   acceptedAt?: string;
   closeAt?: string;
+  closeReason?: string;
+  closeResult?: CloseCaseResult;
+  closeJudgmentAmount?: number;
+  closeApplicantId?: string;
+  closeApplicantName?: string;
+  closeAppliedAt?: string;
+  closeApprovalStatus?: 'pending' | 'approved' | 'rejected';
+  closeApproverId?: string;
+  closeApproverName?: string;
+  closeApprovedAt?: string;
 }
 
 export interface DocVersion {
