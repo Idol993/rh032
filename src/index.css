@@ -1,0 +1,180 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  line-height: 1.6;
+  font-weight: 400;
+  color: #303133;
+  background-color: #F5F7FA;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-width: 1280px;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 transition-colors duration-200 font-medium text-sm;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 border border-primary-500 text-primary-500 rounded-md hover:bg-primary-50 transition-colors duration-200 font-medium text-sm;
+  }
+
+  .btn-danger {
+    @apply px-4 py-2 bg-danger-500 text-white rounded-md hover:bg-danger-600 transition-colors duration-200 font-medium text-sm;
+  }
+
+  .btn-success {
+    @apply px-4 py-2 bg-success-500 text-white rounded-md hover:bg-success-600 transition-colors duration-200 font-medium text-sm;
+  }
+
+  .card {
+    @apply bg-white rounded-lg shadow-card p-4 transition-shadow duration-200 hover:shadow-card-hover;
+  }
+
+  .input-field {
+    @apply w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm;
+  }
+
+  .select-field {
+    @apply w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm bg-white;
+  }
+
+  .table-header {
+    @apply bg-neutral-50 text-neutral-500 text-xs font-medium uppercase tracking-wider;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 text-sm text-neutral-600 whitespace-nowrap;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply bg-success-50 text-success-600;
+  }
+
+  .badge-warning {
+    @apply bg-warning-50 text-warning-600;
+  }
+
+  .badge-danger {
+    @apply bg-danger-50 text-danger-600;
+  }
+
+  .badge-primary {
+    @apply bg-primary-50 text-primary-600;
+  }
+
+  .badge-neutral {
+    @apply bg-neutral-100 text-neutral-600;
+  }
+
+  .sidebar-item {
+    @apply flex items-center px-4 py-2.5 text-sm text-neutral-600 hover:bg-primary-50 hover:text-primary-600 rounded-md transition-colors duration-200 cursor-pointer;
+  }
+
+  .sidebar-item.active {
+    @apply bg-primary-50 text-primary-600 font-medium;
+  }
+
+  .page-title {
+    @apply text-xl font-semibold text-neutral-700 font-serif;
+  }
+
+  .section-title {
+    @apply text-base font-medium text-neutral-700 mb-3;
+  }
+
+  .label-text {
+    @apply text-sm text-neutral-500 mb-1;
+  }
+
+  .value-text {
+    @apply text-sm text-neutral-700;
+  }
+
+  .stat-card {
+    @apply bg-white rounded-lg p-5 shadow-card hover:shadow-card-hover transition-all duration-300;
+  }
+
+  .stat-value {
+    @apply text-2xl font-bold text-neutral-700 font-mono;
+  }
+
+  .stat-label {
+    @apply text-sm text-neutral-500 mt-1;
+  }
+
+  .divider {
+    @apply h-px bg-neutral-200 my-4;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #D3D8E0 transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #D3D8E0;
+    border-radius: 3px;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
