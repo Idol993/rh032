@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Home,
@@ -31,6 +31,7 @@ import { useUserStore } from '@/store/useUserStore';
 const DocumentEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { currentUser } = useUserStore();
 
   const [doc, setDoc] = useState<DocDocument | null>(null);
@@ -98,6 +99,12 @@ const DocumentEditor: React.FC = () => {
       fetchVersions();
     }
   }, [showVersionPanel]);
+
+  useEffect(() => {
+    if (searchParams.get('showVersions') === 'true' && !isNew) {
+      setShowVersionPanel(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

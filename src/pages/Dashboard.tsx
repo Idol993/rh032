@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as echarts from 'echarts';
 import {
   Briefcase,
@@ -34,6 +35,7 @@ const caseTypeLabels: Record<CaseType, string> = {
 };
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [caseStats, setCaseStats] = useState({
     total: 0,
     inProgress: 0,
@@ -414,7 +416,7 @@ const Dashboard: React.FC = () => {
             return (
               <button
                 key={action.title}
-                onClick={() => (window.location.hash = action.path)}
+                onClick={() => navigate(action.path)}
                 className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:border-primary-300 hover:bg-primary-50/50 transition-all duration-200 group"
               >
                 <div
@@ -446,13 +448,13 @@ const Dashboard: React.FC = () => {
                 {deadlineStats.urgent + deadlineStats.overdue} 项紧急
               </span>
             </h2>
-            <a
-              href="#/risk/deadlines"
+            <button
+              onClick={() => navigate('/risk/deadlines')}
               className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-0.5"
             >
               查看全部
               <ChevronRight className="w-3 h-3" />
-            </a>
+            </button>
           </div>
           <div className="divide-y divide-neutral-100">
             {loading ? (
@@ -464,7 +466,7 @@ const Dashboard: React.FC = () => {
                 <div
                   key={deadline.id}
                   className="px-5 py-4 hover:bg-neutral-50 transition-colors cursor-pointer"
-                  onClick={() => (window.location.hash = `#/cases/${deadline.caseId}`)}
+                  onClick={() => navigate(`/cases/${deadline.caseId}`)}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -505,13 +507,13 @@ const Dashboard: React.FC = () => {
               <div className="w-1 h-4 bg-primary-500 rounded-full" />
               案件动态
             </h2>
-            <a
-              href="#/system/logs"
+            <button
+              onClick={() => navigate('/system/logs')}
               className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-0.5"
             >
               查看全部
               <ChevronRight className="w-3 h-3" />
-            </a>
+            </button>
           </div>
           <div className="divide-y divide-neutral-100">
             {loading ? (

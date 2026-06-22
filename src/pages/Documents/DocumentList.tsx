@@ -114,7 +114,7 @@ const DocumentList: React.FC = () => {
   };
 
   const handleViewHistory = (id: string) => {
-    navigate(`/documents/${id}/history`);
+    navigate(`/documents/${id}?showVersions=true`);
   };
 
   const totalPages = Math.ceil(total / pageSize);

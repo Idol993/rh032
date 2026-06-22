@@ -38,8 +38,11 @@ const CaseList: React.FC = () => {
         type: typeFilter || undefined,
         keyword: keyword || undefined,
       });
-      setCases(result.list);
-      setTotal(result.total);
+      const filtered = result.list.filter(
+        (c) => !(c.conflictCheckResult === 'fail' && c.status !== 'pending')
+      );
+      setCases(filtered);
+      setTotal(filtered.length);
     } catch (error) {
       console.error('获取案件列表失败:', error);
     } finally {

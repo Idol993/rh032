@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Home,
@@ -12,7 +12,6 @@ import {
   ShieldX,
   AlertTriangle,
   Save,
-  Send,
   RefreshCw,
   CheckCircle2,
   XCircle,
@@ -29,7 +28,7 @@ import { CaseType } from '@/types';
 import { caseService } from '@/services/caseService';
 import { clientService } from '@/services/clientService';
 import { CASE_TYPE_MAP, CAUSE_LIST, COURT_LIST } from '@/constants';
-import { cn, generateId } from '@/utils';
+import { cn } from '@/utils';
 
 type ClientType = 'individual' | 'enterprise';
 type ConflictCheckStatus = 'pending' | 'checking' | 'pass' | 'fail';
@@ -64,9 +63,11 @@ interface FormErrors {
   amount?: string;
 }
 
-const CaseNew: React.FC = () => {
+const CaseEdit: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState<FormData>({
     clientType: 'enterprise',
     clientName: '',
@@ -97,6 +98,67 @@ const CaseNew: React.FC = () => {
     { key: 'case', title: '案件信息', icon: Briefcase },
     { key: 'conflict', title: '利益冲突检索', icon: ShieldAlert },
   ];
+
+  useEffect(() => {
+    const loadCase = async () => {
+      if (!id) return;
+      try {
+        const caseData = await caseService.getById(id);
+        if (!caseData) {
+          alert('案件不存在');
+          navigate('/cases');
+          return;
+        }
+
+        let clientType: ClientType = 'enterprise';
+        let contactPerson = '';
+        let phone = '';
+        let email = '';
+        let address = '';
+
+        if (caseData.clientId) {
+          const client = await clientService.getById(caseData.clientId);
+          if (client) {
+            clientType = client.type;
+            contactPerson = client.contactPerson || '';
+            phone = client.phone || '';
+            email = client.email || '';
+            address = client.address || '';
+          }
+        }
+
+        setFormData({
+          clientType,
+          clientName: caseData.clientName || '',
+          contactPerson,
+          phone,
+          email,
+          address,
+          oppositePartyName: caseData.oppositeParty || '',
+          oppositePartyType: 'enterprise',
+          oppositePartyContact: '',
+          caseType: caseData.type,
+          cause: caseData.cause || '',
+          court: caseData.court || '',
+          amount: caseData.amount?.toString() || '',
+          description: caseData.description || '',
+          evidenceSummary: caseData.evidenceSummary || '',
+        });
+
+        if (caseData.conflictCheckResult) {
+          setConflictStatus(caseData.conflictCheckResult);
+        }
+      } catch (error) {
+        console.error('加载案件数据失败:', error);
+        alert('加载案件数据失败');
+        navigate('/cases');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadCase();
+  }, [id, navigate]);
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -175,51 +237,7 @@ const CaseNew: React.FC = () => {
     }
   };
 
-  const handleSaveDraft = async () => {
-    try {
-      setSubmitting(true);
-
-      let clientId = '';
-      try {
-        const newClient = await clientService.create({
-          name: formData.clientName,
-          type: formData.clientType,
-          phone: formData.phone,
-          email: formData.email || undefined,
-          address: formData.address || undefined,
-          contactPerson: formData.contactPerson || undefined,
-        });
-        clientId = newClient.id;
-      } catch {
-        clientId = generateId();
-      }
-
-      await caseService.create({
-        name: `${formData.clientName} - ${formData.cause}`,
-        type: formData.caseType as CaseType,
-        cause: formData.cause,
-        court: formData.court,
-        amount: Number(formData.amount) || 0,
-        clientId,
-        clientName: formData.clientName,
-        oppositeParty: formData.oppositePartyName,
-        description: formData.description,
-        evidenceSummary: formData.evidenceSummary,
-        conflictCheckResult: conflictStatus === 'pass' ? 'pass' : conflictStatus === 'fail' ? 'fail' : 'pending',
-        status: 'pending',
-      });
-
-      alert('草稿保存成功');
-      navigate('/cases');
-    } catch (error) {
-      console.error('保存草稿失败:', error);
-      alert('保存草稿失败，请重试');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleSubmit = async () => {
+  const handleSave = async () => {
     if (!validateForm()) {
       const firstErrorField = Object.keys(errors)[0];
       if (firstErrorField) {
@@ -236,48 +254,33 @@ const CaseNew: React.FC = () => {
     }
 
     if (conflictStatus === 'fail') {
-      alert('存在利益冲突，根据《律师法》及律所执业规范，冲突案件禁止正式收案。您只能保存为草稿。');
+      alert('存在利益冲突，无法提交修改。请解决冲突后重试。');
       return;
     }
+
+    if (!id) return;
 
     try {
       setSubmitting(true);
 
-      let clientId = '';
-      try {
-        const newClient = await clientService.create({
-          name: formData.clientName,
-          type: formData.clientType,
-          phone: formData.phone,
-          email: formData.email || undefined,
-          address: formData.address || undefined,
-          contactPerson: formData.contactPerson || undefined,
-        });
-        clientId = newClient.id;
-      } catch {
-        clientId = generateId();
-      }
-
-      await caseService.create({
+      await caseService.update(id, {
         name: `${formData.clientName} - ${formData.cause}`,
         type: formData.caseType as CaseType,
         cause: formData.cause,
         court: formData.court,
         amount: Number(formData.amount) || 0,
-        clientId,
         clientName: formData.clientName,
         oppositeParty: formData.oppositePartyName,
         description: formData.description,
         evidenceSummary: formData.evidenceSummary,
         conflictCheckResult: conflictStatus === 'pass' ? 'pass' : 'fail',
-        status: 'intake',
       });
 
-      alert('提交审批成功');
-      navigate('/cases');
+      alert('修改保存成功');
+      navigate(`/cases/${id}`);
     } catch (error) {
-      console.error('提交审批失败:', error);
-      alert('提交审批失败，请重试');
+      console.error('保存修改失败:', error);
+      alert('保存修改失败，请重试');
     } finally {
       setSubmitting(false);
     }
@@ -295,7 +298,7 @@ const CaseNew: React.FC = () => {
   };
 
   const handleBack = () => {
-    navigate('/cases');
+    navigate(`/cases/${id}`);
   };
 
   const getConflictStatusInfo = () => {
@@ -342,11 +345,22 @@ const CaseNew: React.FC = () => {
   const statusInfo = getConflictStatusInfo();
   const StatusIcon = statusInfo.icon;
 
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-3">
+          <RefreshCw className="w-10 h-10 animate-spin text-primary-500" />
+          <span className="text-neutral-500">加载案件数据中...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6">
       <div className="flex items-center gap-2 text-sm text-neutral-500 mb-4">
         <button
-          onClick={handleBack}
+          onClick={() => navigate('/cases')}
           className="flex items-center gap-1 hover:text-primary-600 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -360,7 +374,7 @@ const CaseNew: React.FC = () => {
           <Home className="w-4 h-4" />
         </button>
         <ChevronRight className="w-4 h-4" />
-        <span className="text-neutral-700">收案登记</span>
+        <span className="text-neutral-700">编辑案件</span>
       </div>
 
       <div className="flex items-center justify-between mb-6">
@@ -369,8 +383,8 @@ const CaseNew: React.FC = () => {
             <FileText className="w-6 h-6 text-primary-500" />
           </div>
           <div>
-            <h1 className="page-title">收案登记</h1>
-            <p className="text-sm text-neutral-500 mt-1">登记新案件信息，进行利益冲突检索后提交审批</p>
+            <h1 className="page-title">编辑案件</h1>
+            <p className="text-sm text-neutral-500 mt-1">修改案件信息，更新后需重新进行利益冲突检索</p>
           </div>
         </div>
         <button
@@ -378,7 +392,7 @@ const CaseNew: React.FC = () => {
           className="btn-secondary flex items-center gap-2"
         >
           <ArrowLeft className="w-4 h-4" />
-          返回列表
+          返回详情
         </button>
       </div>
 
@@ -887,8 +901,8 @@ const CaseNew: React.FC = () => {
                     <p className="text-sm text-neutral-500">
                       {conflictStatus === 'pending' && '请点击下方按钮进行利益冲突检索，确保案件符合律所收案规范'}
                       {conflictStatus === 'checking' && '正在检索历史案件数据，请稍候...'}
-                      {conflictStatus === 'pass' && '经检索，未发现与现有案件存在利益冲突，可以正常收案'}
-                      {conflictStatus === 'fail' && `经检索，发现 ${conflicts.length} 项利益冲突，请审慎评估后决定是否收案`}
+                      {conflictStatus === 'pass' && '经检索，未发现与现有案件存在利益冲突，可以正常保存'}
+                      {conflictStatus === 'fail' && `经检索，发现 ${conflicts.length} 项利益冲突，存在冲突无法保存修改`}
                     </p>
                   </div>
                 </div>
@@ -958,31 +972,21 @@ const CaseNew: React.FC = () => {
                   <ArrowLeft className="w-4 h-4" />
                   上一步
                 </button>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={handleSaveDraft}
-                    disabled={submitting}
-                    className="btn-secondary flex items-center gap-2"
-                  >
+                <button
+                  onClick={handleSave}
+                  disabled={submitting || conflictStatus === 'fail'}
+                  className={cn(
+                    'btn-primary flex items-center gap-2',
+                    (submitting || conflictStatus === 'fail') && 'opacity-50 cursor-not-allowed'
+                  )}
+                >
+                  {submitting ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
                     <Save className="w-4 h-4" />
-                    保存草稿
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    disabled={submitting || conflictStatus === 'fail'}
-                    className={cn(
-                      'btn-primary flex items-center gap-2',
-                      conflictStatus === 'fail' && 'opacity-50 cursor-not-allowed !bg-neutral-400'
-                    )}
-                  >
-                    {submitting ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
-                    )}
-                    提交审批
-                  </button>
-                </div>
+                  )}
+                  保存修改
+                </button>
               </div>
             </div>
           )}
@@ -992,34 +996,24 @@ const CaseNew: React.FC = () => {
               <div className="text-sm text-neutral-500">
                 <span className="text-danger-500">*</span> 为必填项，请确保信息填写完整准确
                 {conflictStatus === 'fail' && (
-                  <span className="ml-2 text-danger-500 font-medium">（存在利益冲突，仅可保存草稿）</span>
+                  <span className="ml-2 text-danger-500 font-medium">（存在利益冲突，无法保存修改）</span>
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleSaveDraft}
-                  disabled={submitting}
-                  className="btn-secondary flex items-center gap-2"
-                >
+              <button
+                onClick={handleSave}
+                disabled={submitting || conflictStatus === 'fail'}
+                className={cn(
+                  'btn-primary flex items-center gap-2',
+                  (submitting || conflictStatus === 'fail') && 'opacity-50 cursor-not-allowed'
+                )}
+              >
+                {submitting ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
                   <Save className="w-4 h-4" />
-                  保存草稿
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={submitting || conflictStatus === 'fail'}
-                  className={cn(
-                    'btn-primary flex items-center gap-2',
-                    conflictStatus === 'fail' && 'opacity-50 cursor-not-allowed !bg-neutral-400'
-                  )}
-                >
-                  {submitting ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                  提交审批
-                </button>
-              </div>
+                )}
+                保存修改
+              </button>
             </div>
           </div>
         </div>
@@ -1028,4 +1022,4 @@ const CaseNew: React.FC = () => {
   );
 };
 
-export default CaseNew;
+export default CaseEdit;

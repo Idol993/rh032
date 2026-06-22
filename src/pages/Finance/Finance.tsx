@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  Search, 
-  Plus, 
-  Eye, 
-  Edit3, 
-  ChevronLeft, 
+import {
+  Search,
+  Plus,
+  Eye,
+  Edit3,
+  ChevronLeft,
   ChevronRight,
   Filter,
   RefreshCw,
@@ -13,14 +12,17 @@ import {
   TrendingUp,
   Calendar,
   FileText,
-  Receipt
+  Receipt,
+  X,
+  Save,
 } from 'lucide-react';
-import { Payment, PaymentStatus, PaymentType } from '@/types';
+import { Payment, PaymentStatus, PaymentType, PaymentStage, Case } from '@/types';
 import { paymentService } from '@/services/paymentService';
-import { 
-  PAYMENT_TYPE_MAP, 
-  PAYMENT_STATUS_MAP, 
-  PAYMENT_STAGE_MAP 
+import { caseService } from '@/services/caseService';
+import {
+  PAYMENT_TYPE_MAP,
+  PAYMENT_STATUS_MAP,
+  PAYMENT_STAGE_MAP
 } from '@/constants';
 import { formatCurrency, cn } from '@/utils';
 
@@ -32,9 +34,25 @@ interface Statistics {
   thisMonth: number;
 }
 
-const Finance: React.FC = () => {
-  const navigate = useNavigate();
+interface FormState {
+  caseId: string;
+  type: PaymentType;
+  amount: number;
+  paidAmount: number;
+  stage: PaymentStage;
+  remark: string;
+}
 
+const initialFormState: FormState = {
+  caseId: '',
+  type: 'fixed',
+  amount: 0,
+  paidAmount: 0,
+  stage: 'intake',
+  remark: '',
+};
+
+const Finance: React.FC = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -52,6 +70,18 @@ const Finance: React.FC = () => {
     count: 0,
     thisMonth: 0,
   });
+
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
+  const [editingId, setEditingId] = useState<string>('');
+  const [formData, setFormData] = useState<FormState>(initialFormState);
+  const [submitting, setSubmitting] = useState(false);
+  const [cases, setCases] = useState<Case[]>([]);
+
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [detailPayment, setDetailPayment] = useState<Payment | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [invoicing, setInvoicing] = useState(false);
 
   const fetchPayments = async () => {
     setLoading(true);
@@ -81,6 +111,18 @@ const Finance: React.FC = () => {
     }
   };
 
+  const fetchActiveCases = async () => {
+    try {
+      const result = await caseService.getCases({ pageSize: 999, page: 1 });
+      const activeCases = result.list.filter(
+        (c) => !['closed', 'archived'].includes(c.status)
+      );
+      setCases(activeCases);
+    } catch (error) {
+      console.error('获取案件列表失败:', error);
+    }
+  };
+
   useEffect(() => {
     fetchPayments();
     fetchStatistics();
@@ -98,12 +140,90 @@ const Finance: React.FC = () => {
     setPage(1);
   };
 
-  const handleView = (id: string) => {
-    navigate(`/finance/${id}`);
+  const handleView = async (id: string) => {
+    setDetailLoading(true);
+    setShowDetailModal(true);
+    try {
+      const payment = await paymentService.getById(id);
+      setDetailPayment(payment);
+    } catch (error) {
+      console.error('获取详情失败:', error);
+      setDetailPayment(null);
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
-  const handleEdit = (id: string) => {
-    navigate(`/finance/${id}/edit`);
+  const handleEdit = (payment: Payment) => {
+    setFormMode('edit');
+    setEditingId(payment.id);
+    setFormData({
+      caseId: payment.caseId,
+      type: payment.type,
+      amount: payment.amount,
+      paidAmount: payment.paidAmount,
+      stage: payment.stage,
+      remark: payment.remark || '',
+    });
+    fetchActiveCases();
+    setShowFormModal(true);
+  };
+
+  const handleNew = () => {
+    setFormMode('create');
+    setEditingId('');
+    setFormData(initialFormState);
+    fetchActiveCases();
+    setShowFormModal(true);
+  };
+
+  const handleFormSubmit = async () => {
+    if (!formData.caseId) return;
+    setSubmitting(true);
+    try {
+      const selectedCase = cases.find((c) => c.id === formData.caseId);
+      if (!selectedCase) return;
+
+      if (formMode === 'create') {
+        await paymentService.create({
+          caseId: formData.caseId,
+          caseName: selectedCase.name,
+          clientName: selectedCase.clientName,
+          type: formData.type,
+          amount: formData.amount,
+          paidAmount: formData.paidAmount,
+          stage: formData.stage,
+          status: formData.paidAmount >= formData.amount
+            ? 'paid'
+            : formData.paidAmount > 0
+              ? 'partial'
+              : 'unpaid',
+          remark: formData.remark,
+          payAt: formData.paidAmount > 0 ? new Date().toISOString() : undefined,
+        });
+      } else {
+        await paymentService.update(editingId, {
+          type: formData.type,
+          amount: formData.amount,
+          paidAmount: formData.paidAmount,
+          stage: formData.stage,
+          status: formData.paidAmount >= formData.amount
+            ? 'paid'
+            : formData.paidAmount > 0
+              ? 'partial'
+              : 'unpaid',
+          remark: formData.remark,
+        });
+      }
+
+      setShowFormModal(false);
+      fetchPayments();
+      fetchStatistics();
+    } catch (error) {
+      console.error('操作失败:', error);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleInvoice = async (id: string) => {
@@ -118,8 +238,21 @@ const Finance: React.FC = () => {
     }
   };
 
-  const handleNew = () => {
-    navigate('/finance/new');
+  const handleDetailInvoice = async () => {
+    if (!detailPayment) return;
+    setInvoicing(true);
+    try {
+      const result = await paymentService.issueInvoice(detailPayment.id);
+      if (result) {
+        setDetailPayment(result);
+        fetchPayments();
+        fetchStatistics();
+      }
+    } catch (error) {
+      console.error('开票失败:', error);
+    } finally {
+      setInvoicing(false);
+    }
   };
 
   const totalPages = Math.ceil(total / pageSize);
@@ -156,7 +289,7 @@ const Finance: React.FC = () => {
   const renderPagination = () => {
     const pages: (number | string)[] = [];
     const maxVisiblePages = 5;
-    
+
     if (totalPages <= maxVisiblePages) {
       for (let i = 1; i <= totalPages; i++) {
         pages.push(i);
@@ -178,7 +311,7 @@ const Finance: React.FC = () => {
         pages.push(totalPages);
       }
     }
-    
+
     return pages;
   };
 
@@ -349,8 +482,8 @@ const Finance: React.FC = () => {
                 </tr>
               ) : (
                 payments.map((payment) => (
-                  <tr 
-                    key={payment.id} 
+                  <tr
+                    key={payment.id}
                     className="hover:bg-neutral-50 transition-colors"
                   >
                     <td className="table-cell">
@@ -392,21 +525,17 @@ const Finance: React.FC = () => {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
+                        {payment.invoiceStatus === 'none' && (
+                          <button
+                            onClick={() => handleInvoice(payment.id)}
+                            className="p-1.5 text-neutral-500 hover:text-success-600 hover:bg-success-50 rounded-md transition-colors"
+                            title="开票"
+                          >
+                            <Receipt className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleInvoice(payment.id)}
-                          disabled={payment.invoiceStatus === 'issued'}
-                          className={cn(
-                            "p-1.5 rounded-md transition-colors",
-                            payment.invoiceStatus === 'issued'
-                              ? "text-neutral-300 cursor-not-allowed"
-                              : "text-neutral-500 hover:text-success-600 hover:bg-success-50"
-                          )}
-                          title="开票"
-                        >
-                          <Receipt className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleEdit(payment.id)}
+                          onClick={() => handleEdit(payment)}
                           className="p-1.5 text-neutral-500 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors"
                           title="编辑"
                         >
@@ -432,14 +561,14 @@ const Finance: React.FC = () => {
                 disabled={page === 1}
                 className={cn(
                   "p-2 rounded-md transition-colors",
-                  page === 1 
-                    ? "text-neutral-300 cursor-not-allowed" 
+                  page === 1
+                    ? "text-neutral-300 cursor-not-allowed"
                     : "text-neutral-600 hover:bg-neutral-100"
                 )}
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              
+
               {renderPagination().map((p, index) => (
                 <button
                   key={index}
@@ -457,14 +586,14 @@ const Finance: React.FC = () => {
                   {p}
                 </button>
               ))}
-              
+
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
                 className={cn(
                   "p-2 rounded-md transition-colors",
-                  page === totalPages 
-                    ? "text-neutral-300 cursor-not-allowed" 
+                  page === totalPages
+                    ? "text-neutral-300 cursor-not-allowed"
                     : "text-neutral-600 hover:bg-neutral-100"
                 )}
               >
@@ -474,6 +603,243 @@ const Finance: React.FC = () => {
           </div>
         )}
       </div>
+
+      {showFormModal && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowFormModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] overflow-hidden animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between bg-primary-50">
+              <h2 className="text-lg font-semibold text-primary-600">
+                {formMode === 'create' ? '新增收费' : '编辑收费'}
+              </h2>
+              <button
+                onClick={() => setShowFormModal(false)}
+                className="text-neutral-400 hover:text-neutral-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[60vh] space-y-4">
+              <div>
+                <label className="label-text">选择案件 <span className="text-danger-500">*</span></label>
+                <select
+                  value={formData.caseId}
+                  onChange={(e) => setFormData({ ...formData, caseId: e.target.value })}
+                  className="select-field"
+                  disabled={formMode === 'edit'}
+                >
+                  <option value="">请选择案件</option>
+                  {cases.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}（{c.clientName}）
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="label-text">收费类型</label>
+                <select
+                  value={formData.type}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value as PaymentType })}
+                  className="select-field"
+                >
+                  {Object.entries(PAYMENT_TYPE_MAP).map(([key, value]) => (
+                    <option key={key} value={key}>{value}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="label-text">应收金额</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.amount}
+                  onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })}
+                  className="input-field"
+                  placeholder="请输入应收金额"
+                />
+              </div>
+
+              <div>
+                <label className="label-text">已收金额</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.paidAmount}
+                  onChange={(e) => setFormData({ ...formData, paidAmount: Number(e.target.value) })}
+                  className="input-field"
+                  placeholder="请输入已收金额"
+                />
+              </div>
+
+              <div>
+                <label className="label-text">收费阶段</label>
+                <select
+                  value={formData.stage}
+                  onChange={(e) => setFormData({ ...formData, stage: e.target.value as PaymentStage })}
+                  className="select-field"
+                >
+                  {Object.entries(PAYMENT_STAGE_MAP).map(([key, value]) => (
+                    <option key={key} value={key}>{value}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="label-text">备注</label>
+                <textarea
+                  value={formData.remark}
+                  onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+                  className="input-field min-h-[80px] resize-y"
+                  placeholder="请输入备注信息"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-neutral-200 bg-neutral-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowFormModal(false)}
+                className="btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleFormSubmit}
+                disabled={submitting || !formData.caseId}
+                className={cn(
+                  "btn-primary flex items-center gap-2",
+                  (submitting || !formData.caseId) && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <Save className="w-4 h-4" />
+                {submitting ? '提交中...' : '确认'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDetailModal && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowDetailModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-hidden animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between bg-primary-50">
+              <h2 className="text-lg font-semibold text-primary-600">收费详情</h2>
+              <button
+                onClick={() => setShowDetailModal(false)}
+                className="text-neutral-400 hover:text-neutral-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {detailLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <RefreshCw className="w-8 h-8 animate-spin text-primary-500" />
+                </div>
+              ) : detailPayment ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm text-neutral-500">案件名称</label>
+                      <p className="text-sm text-neutral-700 font-medium mt-1">{detailPayment.caseName}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-neutral-500">客户名称</label>
+                      <p className="text-sm text-neutral-700 font-medium mt-1">{detailPayment.clientName}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm text-neutral-500">收费类型</label>
+                      <p className="text-sm text-neutral-700 mt-1">{PAYMENT_TYPE_MAP[detailPayment.type]}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-neutral-500">收费阶段</label>
+                      <p className="text-sm text-neutral-700 mt-1">{PAYMENT_STAGE_MAP[detailPayment.stage]}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm text-neutral-500">应收金额</label>
+                      <p className="text-sm text-neutral-700 font-mono font-medium mt-1">{formatCurrency(detailPayment.amount)}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-neutral-500">已收金额</label>
+                      <p className="text-sm text-primary-600 font-mono font-medium mt-1">{formatCurrency(detailPayment.paidAmount)}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm text-neutral-500">收费状态</label>
+                      <div className="mt-1">
+                        <span className={cn(getBadgeClass(PAYMENT_STATUS_MAP[detailPayment.status].color))}>
+                          {PAYMENT_STATUS_MAP[detailPayment.status].label}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm text-neutral-500">开票状态</label>
+                      <div className="mt-1">
+                        <span className={cn(getInvoiceStatusClass(detailPayment.invoiceStatus))}>
+                          {getInvoiceStatusText(detailPayment.invoiceStatus)}
+                        </span>
+                        {detailPayment.invoiceNo && (
+                          <span className="text-xs text-neutral-400 ml-2">{detailPayment.invoiceNo}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {detailPayment.remark && (
+                    <div>
+                      <label className="text-sm text-neutral-500">备注</label>
+                      <div className="mt-1 p-3 bg-neutral-50 rounded-lg text-sm text-neutral-700">
+                        {detailPayment.remark}
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-sm text-neutral-500">创建时间</label>
+                    <p className="text-sm text-neutral-500 mt-1">{detailPayment.createdAt}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-neutral-500">未找到记录</div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-neutral-200 bg-neutral-50 flex justify-end gap-3">
+              {detailPayment && detailPayment.invoiceStatus === 'none' && (
+                <button
+                  onClick={handleDetailInvoice}
+                  disabled={invoicing}
+                  className="btn-success flex items-center gap-2"
+                >
+                  <Receipt className="w-4 h-4" />
+                  {invoicing ? '开票中...' : '开具发票'}
+                </button>
+              )}
+              <button
+                onClick={() => setShowDetailModal(false)}
+                className="btn-secondary"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

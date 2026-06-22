@@ -7,6 +7,7 @@ import Dashboard from '@/pages/Dashboard';
 import CaseList from '@/pages/Cases/CaseList';
 import CaseDetail from '@/pages/Cases/CaseDetail';
 import CaseNew from '@/pages/Cases/CaseNew';
+import CaseEdit from '@/pages/Cases/CaseEdit';
 import ClientList from '@/pages/Clients/ClientList';
 import DocumentList from '@/pages/Documents/DocumentList';
 import DocumentEditor from '@/pages/Documents/DocumentEditor';
@@ -40,6 +41,7 @@ const AppRouter: React.FC = () => {
         <Route path="/cases" element={<CaseList />} />
         <Route path="/cases/new" element={<CaseNew />} />
         <Route path="/cases/:id" element={<CaseDetail />} />
+        <Route path="/cases/:id/edit" element={<CaseEdit />} />
         <Route path="/cases/assign" element={<CaseList />} />
         
         <Route path="/clients" element={<ClientList />} />
